@@ -53,33 +53,44 @@ def insert_data_to_db(df: pd.DataFrame, table_name: str):
     """SSH 터널을 통해 데이터프레임을 지정된 테이블에 삽입합니다."""
     load_dotenv()
 
-    ssh_host = os.getenv("SSH_HOST")
-    ssh_port = int(os.getenv("SSH_PORT"))
-    ssh_user = os.getenv("SSH_USER")
-    ssh_pkey = os.getenv("SSH_PKEY")
+    env = os.getenv("EXECUTION_ENV", "local")
+    print(f"--- 실행 환경: {env} ---")
 
-    db_host = os.getenv("DB_HOST")
-    db_port = int(os.getenv("DB_PORT"))
-    db_user = os.getenv("DB_USER")
-    db_password = os.getenv("DB_PASSWORD")
-    db_name = os.getenv("DB_NAME")
-
-    print(f"\n▶ '{table_name}' 테이블에 데이터 삽입을 시작합니다...")
     try:
-        with SSHTunnelForwarder(
-                (ssh_host, ssh_port),
-                ssh_username=ssh_user,
-                ssh_pkey=ssh_pkey,
-                remote_bind_address=(db_host, db_port)
-        ) as server:
-            local_port = server.local_bind_port
-            conn_str = f'mysql+pymysql://{db_user}:{db_password}@127.0.0.1:{local_port}/{db_name}'
+        db_host = os.getenv("DB_HOST")
+        db_port = int(os.getenv("DB_PORT"))
+        db_user = os.getenv("DB_USER")
+        db_password = os.getenv("DB_PASSWORD")
+        db_name = os.getenv("DB_NAME")
+
+        if env == "production":
+            print("운영 환경으로 판단하여 RDS에 직접 접속합니다.")
+            conn_str = f'mysql+pymysql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}'
             engine = create_engine(conn_str)
 
+            print(f"\n▶ '{table_name}' 테이블에 데이터 삽입을 시작합니다...")
             df.to_sql(table_name, con=engine, if_exists='append', index=False)
             print(f"✅ '{table_name}' 테이블에 데이터 {len(df)}건이 성공적으로 삽입되었습니다.")
+        else:
+            print("로컬 환경으로 판단하여 SSH 터널링을 시작합니다.")
+            ssh_host = os.getenv("SSH_HOST")
+            ssh_port = int(os.getenv("SSH_PORT"))
+            ssh_user = os.getenv("SSH_USER")
+            ssh_pkey = os.getenv("SSH_PKEY")
+
+            with SSHTunnelForwarder(
+                    (ssh_host, ssh_port),
+                    ssh_username=ssh_user,
+                    ssh_pkey=ssh_pkey,
+                    remote_bind_address=(db_host, db_port)
+            ) as server:
+                local_port = server.local_bind_port
+                conn_str = f'mysql+pymysql://{db_user}:{db_password}@127.0.0.1:{local_port}/{db_name}'
+                engine = create_engine(conn_str)
+
+                print(f"\n▶ '{table_name}' 테이블에 데이터 삽입을 시작합니다...")
+                df.to_sql(table_name, con=engine, if_exists='append', index=False)
+                print(f"✅ '{table_name}' 테이블에 데이터 {len(df)}건이 성공적으로 삽입되었습니다.")
 
     except Exception as e:
         print(f"!! 오류: '{table_name}' 테이블 처리 중 문제가 발생했습니다: {e}")
-
-# main 함수와 if __name__ == "__main__": 블록은 여기서 제거합니다.

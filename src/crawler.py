@@ -1,4 +1,5 @@
 import time
+import os
 from selenium import webdriver
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
@@ -8,18 +9,41 @@ from selenium.webdriver.support import expected_conditions as EC
 
 def setup_driver(download_dir):
     """다운로드 폴더 설정 및 웹 드라이버를 초기화합니다."""
+    env = os.getenv("EXECUTION_ENV", "local")
+    print(f"--- 실행 환경: {env} ---")
+
     chrome_options = webdriver.ChromeOptions()
     prefs = {
         "download.default_directory": download_dir,
         "download.prompt_for_download": False,
         "download.directory_upgrade": True
     }
+
     chrome_options.add_experimental_option("prefs", prefs)
 
+    if env == "production":
+        print("운영 환경으로 판단하여 RDS에 직접 접속합니다.(Headless 모드)")
+
+        # --- 서버 환경을 위한 옵션 추가 ---
+        chrome_options.add_argument("--headless")  # GUI 없이 백그라운드에서 실행
+        chrome_options.add_argument("--no-sandbox")  # Docker 컨테이너 환경에서 필수
+        chrome_options.add_argument("--disable-dev-shm-usage")  # 공유 메모리 관련 문제 방지
+        chrome_options.add_argument("--window-size=1920x1080")  # 창 크기 설정 (레이아웃 깨짐 방지)
+        chrome_options.add_argument(
+            "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.102 Safari/537.36")  # 일반적인 사용자처럼 보이게 설정
+    else:
+        print("로컬 환경으로 드라이버 옵션을 설정합니다.")
+
+    # 드라이버와 wait 객체 생성 (중복 제거)
     driver = webdriver.Chrome(options=chrome_options)
-    driver.maximize_window()
+
+    # 로컬 환경에서만 창 최대화
+    if env != "production":
+        driver.maximize_window()
+
     wait = WebDriverWait(driver, 20)
-    print("▶ 웹 드라이버가 설정되었습니다.")
+    print("▶ 웹 드라이버가 성공적으로 설정되었습니다.")
+
     return driver, wait
 
 
